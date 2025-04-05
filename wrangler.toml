@@ -3,9 +3,9 @@ main = "worker.js" # The entry point for your worker code
 compatibility_date = "2023-10-30" # Use a recent compatibility date
 
 # Routes tell Cloudflare which requests should trigger this worker.
-# The worker now handles requests routed to lkly.net/+
+# The worker handles requests routed to api.shorty.lkly.net
 routes = [
-  { pattern = "lkly.net/+*", zone_name = "lkly.net" } # Handles API calls and redirects directly
+  { pattern = "api.shorty.lkly.net/*", zone_name = "lkly.net" } # Handles API calls
 ]
 
 # KV Namespace binding

@@ -61,8 +61,8 @@ export default {
       });
     }
 
-    // API endpoint for creating short links (path includes /+ due to routing)
-    if (path === '/+/api/create' && method === 'POST') {
+    // API endpoint for creating short links
+    if (path === '/api/create' && method === 'POST') {
       // Allow CORS for this endpoint specifically if OPTIONS didn't catch it broadly
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -121,8 +121,8 @@ export default {
       }
     }
 
-    // API endpoint for checking stats (path includes /+ due to routing)
-    else if (path.startsWith('/+/api/stats/') && method === 'GET') {
+    // API endpoint for checking stats
+    else if (path.startsWith('/api/stats/') && method === 'GET') {
         // Allow CORS for this endpoint
         const corsHeaders = {
           'Access-Control-Allow-Origin': '*',
@@ -134,7 +134,7 @@ export default {
           return new Response(null, { status: 204, headers: corsHeaders });
         }
 
-        const shortId = path.substring('/+/api/stats/'.length); // Adjusted for /+ prefix
+        const shortId = path.substring('/api/stats/'.length);
          if (!shortId) {
             return errorResponse('Missing short ID in path.', 400, corsHeaders);
         }

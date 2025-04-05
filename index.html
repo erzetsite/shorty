@@ -253,7 +253,7 @@
                     this.copied = false;
 
                     try {
-                        const response = await fetch('https://lkly.net/+/api/create', {
+                        const response = await fetch('https://lkly.net/api/create', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ longUrl: this.longUrlInput })
@@ -297,7 +297,7 @@
                             throw new Error("Could not extract Short ID from the input.");
                         }
 
-                        const response = await fetch(`https://lkly.net/+/api/stats/${shortId}`); // Use final absolute worker URL
+                        const response = await fetch(`https://lkly.net/api/stats/${shortId}`); // Use final absolute worker URL
 
                         const result = await response.json();
 

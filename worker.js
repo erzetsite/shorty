@@ -49,7 +49,7 @@ export default {
     // Note: Hostname check is removed as wrangler.toml now routes only api.shorty.lkly.net/* to this worker.
 
     // Handle CORS preflight requests for API endpoints
-    if (method === 'OPTIONS' && (path.startsWith('/api/'))) {
+    if (method === 'OPTIONS' && (path.startsWith('/api/') || path.startsWith('/+/api/'))) {
       return new Response(null, {
         status: 204,
         headers: {
@@ -62,7 +62,7 @@ export default {
     }
 
     // API endpoint for creating short links
-    if (path === '/api/create' && method === 'POST') {
+    if ((path === '/api/create' || path === '/+/api/create') && method === 'POST') {
       // Allow CORS for this endpoint specifically if OPTIONS didn't catch it broadly
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -122,7 +122,7 @@ export default {
     }
 
     // API endpoint for checking stats
-    else if (path.startsWith('/api/stats/') && method === 'GET') {
+    else if ((path.startsWith('/api/stats/') || path.startsWith('/+/api/stats/')) && method === 'GET') {
         // Allow CORS for this endpoint
         const corsHeaders = {
           'Access-Control-Allow-Origin': '*',
@@ -134,7 +134,13 @@ export default {
           return new Response(null, { status: 204, headers: corsHeaders });
         }
 
-        const shortId = path.substring('/api/stats/'.length);
+        // Extract shortId from either /api/stats/ or /+/api/stats/ path format
+        let shortId;
+        if (path.startsWith('/api/stats/')) {
+            shortId = path.substring('/api/stats/'.length);
+        } else if (path.startsWith('/+/api/stats/')) {
+            shortId = path.substring('/+/api/stats/'.length);
+        }
          if (!shortId) {
             return errorResponse('Missing short ID in path.', 400, corsHeaders);
         }

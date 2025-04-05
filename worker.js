@@ -93,7 +93,8 @@ export default {
         await LINKS_KV.put(shortId, longUrl);
         await LINKS_KV.put(`${shortId}_meta`, JSON.stringify(metadata));
 
-        const shortUrl = `${url.origin}/${shortId}`; // Construct the full short URL
+        const shortUrlBase = 'https://shorty.lkly.net'; // Use the site's domain for generated URLs
+        const shortUrl = `${shortUrlBase}/${shortId}`; // Construct the full short URL
         return jsonResponse({ shortUrl, originalUrl: longUrl });
 
       } catch (e) {

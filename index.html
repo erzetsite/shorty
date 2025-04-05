@@ -249,7 +249,7 @@
                     this.copied = false;
 
                     try {
-                        const response = await fetch('/api/create', { // Use relative path
+                        const response = await fetch('https://api.shorty.lkly.net/api/create', { // Use absolute worker URL
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ longUrl: this.longUrlInput })
@@ -293,7 +293,7 @@
                             throw new Error("Could not extract Short ID from the input.");
                         }
 
-                        const response = await fetch(`/api/stats/${shortId}`); // Use relative path
+                        const response = await fetch(`https://api.shorty.lkly.net/api/stats/${shortId}`); // Use absolute worker URL
 
                         const result = await response.json();
 

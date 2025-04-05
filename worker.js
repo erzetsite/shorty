@@ -1,9 +1,3 @@
-// Define the KV namespace binding name. This MUST match the binding name in your wrangler.toml
-// We'll use 'SHORTY_LINKS' as the namespace name.
-// We'll also store metadata (like click count) in a separate namespace or by appending to the key.
-// Let's use key suffixes for simplicity: `id` stores the URL, `id_meta` stores metadata.
-// const LINKS_KV = SHORTY_LINKS; // This global variable is injected by the Cloudflare environment
-
 // Simple random string generator for short IDs
 function generateShortId(length = 6) {
   const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

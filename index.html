@@ -27,9 +27,6 @@
         document.head.appendChild(script);
       }
     </script>
-    <!-- End Configuration -->
-    <!-- Delete analytics if self hosting -->
-    <!-- <script defer src="https://umami.lkly.net/script.js" data-website-id="57574537-b539-470c-a8aa-b372277c11fc"></script> -->
     <title>Shorty | Minimal URL Shortener</title>
     <script>
         (function() {
@@ -208,7 +205,7 @@
             </div>
         </main>
 
-        <!-- Report Abuse Modal - Moved INSIDE the main x-data div, before footer -->
+        <!-- Report Abuse Modal -->
         <div x-show="showReportModal" x-cloak
              class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
              @click.away="showReportModal = false">
@@ -296,13 +293,13 @@
                 reportMessage: '',
                 reportSuccess: false,
 
-                // Dark Mode State (already existed)
+                // Dark Mode State 
                 isDarkMode: false,
                 toggleClickCount: 0,
                 toggleClickTimer: null,
                 showToggleMessage: false,
 
-                // Dark Mode Methods (already existed)
+                // Dark Mode Methods 
                 initDarkMode() {
                     this.isDarkMode = document.documentElement.classList.contains('dark');
                 },
@@ -462,11 +459,23 @@
                             })
                         });
                         const result = await response.json();
-                        if (!response.ok) throw new Error(result.error || `HTTP error! status: ${response.status}`);
-                        this.reportMessage = result.message || 'Report submitted successfully.';
-                        this.reportSuccess = true;
-                        setTimeout(() => { this.showReportModal = false; this.resetReportForm(); }, 3000);
+
+                        // Handle specific 429 "Already Reported" status gracefully
+                        if (response.status === 429) {
+                            this.reportMessage = result.message || 'You have already reported this recently.'; // Use message from API
+                            this.reportSuccess = false; // Keep it styled as non-success
+                            // Do not auto-close the modal in this case
+                        } else if (!response.ok) {
+                            // Handle other errors by throwing
+                            throw new Error(result.error || `HTTP error! status: ${response.status}`);
+                        } else {
+                            // Handle success (2xx status)
+                            this.reportMessage = result.message || 'Report submitted successfully.';
+                            this.reportSuccess = true;
+                            setTimeout(() => { this.showReportModal = false; this.resetReportForm(); }, 3000); // Auto-close on success
+                        }
                     } catch (error) {
+                        // Catch errors thrown from !response.ok or fetch failures
                         console.error('Error submitting report:', error);
                         this.reportMessage = error.message || 'Failed to submit report.';
                         this.reportSuccess = false;

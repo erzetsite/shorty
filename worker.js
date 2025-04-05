@@ -71,23 +71,18 @@ export default {
       };
 
       try {
-        // Handle preflight request specifically for /api/create if needed
-        if (method === 'OPTIONS') {
-          return new Response(null, { status: 204, headers: corsHeaders });
-        }
-
         const { longUrl } = await request.json();
         if (!longUrl) {
-          return errorResponse('Missing longUrl parameter');
+          // Use the main corsHeaders for the error response too
+          return errorResponse('Missing longUrl parameter', 400, corsHeaders);
         }
         // Basic URL validation (consider more robust validation)
         try {
             new URL(longUrl);
         } catch (_) {
-            return errorResponse('Invalid URL format provided.');
+            // Use the main corsHeaders for the error response too
+            return errorResponse('Invalid URL format provided.', 400, corsHeaders);
         }
-
-
         let shortId;
         let attempts = 0;
         const maxAttempts = 5; // Prevent infinite loops in case of unlikely collisions
@@ -97,7 +92,8 @@ export default {
           shortId = generateShortId();
           attempts++;
           if (attempts > maxAttempts) {
-            return errorResponse('Failed to generate a unique short ID.', 500);
+            // Use the main corsHeaders for the error response too
+            return errorResponse('Failed to generate a unique short ID.', 500, corsHeaders);
           }
           // Check if ID already exists in KV
         } while (await LINKS_KV.get(shortId) !== null);

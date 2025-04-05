@@ -24,8 +24,15 @@ function jsonResponse(data, status = 200, headers = {}) {
 }
 
 // Helper to return error responses
-function errorResponse(message, status = 400) {
-  return jsonResponse({ error: message }, status);
+function errorResponse(message, status = 400, headers = {}) { // Add headers parameter
+  // Ensure base CORS headers are included if custom ones are provided
+  const finalHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      ...headers // Merge provided headers
+  };
+  return jsonResponse({ error: message }, status, finalHeaders); // Pass headers to jsonResponse
 }
 
 export default {

@@ -15,24 +15,26 @@ function generateShortId(length = 6) {
 }
 
 // Helper to return JSON responses
-function jsonResponse(data, status = 200, headers = {}) {
+function jsonResponse(data, status = 200, headers = {}, env) { // Add env
   headers['Content-Type'] = 'application/json';
-  headers['Access-Control-Allow-Origin'] = 'https://shorty.lkly.net'; // Restrict to frontend domain
+  // Use environment variable for allowed origin, default if not set
+  headers['Access-Control-Allow-Origin'] = env.FRONTEND_DOMAIN || '*';
   headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
   headers['Access-Control-Allow-Headers'] = 'Content-Type';
   return new Response(JSON.stringify(data), { status, headers });
 }
 
 // Helper to return error responses
-function errorResponse(message, status = 400, headers = {}) { // Add headers parameter
+function errorResponse(message, status = 400, headers = {}, env) { // Add env
   // Ensure base CORS headers are included if custom ones are provided
   const finalHeaders = {
-      'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
+      'Access-Control-Allow-Origin': env.FRONTEND_DOMAIN || '*', // Use environment variable
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
       ...headers // Merge provided headers
   };
-  return jsonResponse({ error: message }, status, finalHeaders); // Pass headers to jsonResponse
+  // Pass env to jsonResponse so it can set the correct origin
+  return jsonResponse({ error: message }, status, finalHeaders, env);
 }
 
 export default {
@@ -53,7 +55,7 @@ export default {
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
+          'Access-Control-Allow-Origin': env.FRONTEND_DOMAIN || '*', // Use environment variable
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Max-Age': '86400', // Cache preflight response for 1 day
@@ -63,9 +65,9 @@ export default {
 
     // API endpoint for creating short links
     if (path === '/api/create' && method === 'POST') {
-      // Allow CORS for this endpoint specifically if OPTIONS didn't catch it broadly
+      // Define CORS headers using the environment variable
       const corsHeaders = {
-        'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
+        'Access-Control-Allow-Origin': env.FRONTEND_DOMAIN || '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       };
@@ -79,14 +81,16 @@ export default {
 
         // 1. Validate Turnstile Token
         if (!token) {
-          return errorResponse('Missing CAPTCHA token.', 400, corsHeaders);
+          // Pass env to errorResponse
+          return errorResponse('Missing CAPTCHA token.', 400, corsHeaders, env);
         }
 
         // Secret key is stored in env via `wrangler secret put TURNSTILE_SECRET_KEY`
         const SECRET_KEY = env.TURNSTILE_SECRET_KEY;
         if (!SECRET_KEY) {
             console.error("TURNSTILE_SECRET_KEY not set in worker environment.");
-            return errorResponse('CAPTCHA configuration error.', 500, corsHeaders);
+            // Pass env to errorResponse
+            return errorResponse('CAPTCHA configuration error.', 500, corsHeaders, env);
         }
 
         let formData = new FormData();
@@ -104,7 +108,8 @@ export default {
         const outcome = await turnstileResult.json();
         if (!outcome.success) {
             console.log('Turnstile verification failed:', outcome);
-            return errorResponse(`CAPTCHA verification failed. [${outcome['error-codes']?.join(', ') || 'Unknown reason'}]`, 403, corsHeaders);
+            // Pass env to errorResponse
+            return errorResponse(`CAPTCHA verification failed. [${outcome['error-codes']?.join(', ') || 'Unknown reason'}]`, 403, corsHeaders, env);
         }
         // --- End Turnstile Validation ---
 
@@ -128,22 +133,23 @@ export default {
             const isBlocked = await LINKS_KV.get(blockKey);
             if (isBlocked !== null) { // Check if the key exists (value doesn't matter, just existence)
                 console.log(`Blocked attempt to shorten URL from blocked domain: ${domainToCheck}`);
-                return errorResponse('This domain has been blocked and cannot be shortened.', 403, corsHeaders);
+                 // Pass env to errorResponse
+                return errorResponse('This domain has been blocked and cannot be shortened.', 403, corsHeaders, env);
             }
         }
         // --- End Blocklist Check ---
 
         // 3. Proceed with link creation if Turnstile passed and domain not blocked
         if (!longUrl) {
-          // Use the main corsHeaders for the error response too
-          return errorResponse('Missing longUrl parameter', 400, corsHeaders); // Should be caught earlier, but keep for safety
+          // Pass env to errorResponse
+          return errorResponse('Missing longUrl parameter', 400, corsHeaders, env);
         }
         // Basic URL validation (consider more robust validation)
         try {
             new URL(longUrl);
         } catch (_) {
-            // Use the main corsHeaders for the error response too
-            return errorResponse('Invalid URL format provided.', 400, corsHeaders);
+            // Pass env to errorResponse
+            return errorResponse('Invalid URL format provided.', 400, corsHeaders, env);
         }
         let shortId;
         let attempts = 0;
@@ -154,8 +160,8 @@ export default {
           shortId = generateShortId();
           attempts++;
           if (attempts > maxAttempts) {
-            // Use the main corsHeaders for the error response too
-            return errorResponse('Failed to generate a unique short ID.', 500, corsHeaders);
+            // Pass env to errorResponse
+            return errorResponse('Failed to generate a unique short ID.', 500, corsHeaders, env);
           }
           // Check if ID already exists in KV
         } while (await LINKS_KV.get(shortId) !== null);
@@ -171,22 +177,24 @@ export default {
         await LINKS_KV.put(shortId, longUrl);
         await LINKS_KV.put(`${shortId}_meta`, JSON.stringify(metadata));
 
-        const shortUrlBase = 'https://lkly.net'; // Use the final short domain
+        // Use environment variable for the short domain base, fallback if not set
+        const shortUrlBase = env.SHORT_DOMAIN || url.origin; // Fallback to worker's origin (less ideal)
         const shortUrl = `${shortUrlBase}/+${shortId}`; // Add the '+' before the shortId
-        // Return response with CORS headers
-        return jsonResponse({ shortUrl, originalUrl: longUrl }, 200, corsHeaders);
+        // Pass env to jsonResponse
+        return jsonResponse({ shortUrl, originalUrl: longUrl }, 200, corsHeaders, env);
 
       } catch (e) {
         console.error("Error creating link:", e);
-        // Return error response with CORS headers
-        return errorResponse(e.message || 'Failed to create short link.', 500, corsHeaders);
+        // Pass env to errorResponse
+        return errorResponse(e.message || 'Failed to create short link.', 500, corsHeaders, env);
       }
     }
 
     // API endpoint for reporting abuse
     else if (path === '/api/report' && method === 'POST') {
-        const corsHeaders = { // Define CORS headers for this endpoint
-            'Access-Control-Allow-Origin': 'https://shorty.lkly.net',
+        // Define CORS headers using the environment variable
+        const corsHeaders = {
+            'Access-Control-Allow-Origin': env.FRONTEND_DOMAIN || '*',
             'Access-Control-Allow-Methods': 'POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
         };
@@ -201,42 +209,50 @@ export default {
             const token = requestBody['cf-turnstile-response'];
             const ip = request.headers.get('CF-Connecting-IP');
 
-            // 1. Validate Turnstile Token
-            if (!token) {
-                return errorResponse('Missing CAPTCHA token.', 400, corsHeaders);
-            }
-            const SECRET_KEY = env.TURNSTILE_SECRET_KEY;
-            if (!SECRET_KEY) {
-                console.error("TURNSTILE_SECRET_KEY not set in worker environment.");
-                return errorResponse('CAPTCHA configuration error.', 500, corsHeaders);
-            }
-            let formData = new FormData();
+        // 1. Validate Turnstile Token
+        if (!token) {
+             // Pass env to errorResponse
+            return errorResponse('Missing CAPTCHA token.', 400, corsHeaders, env);
+        }
+        const SECRET_KEY = env.TURNSTILE_SECRET_KEY;
+        if (!SECRET_KEY) {
+            console.error("TURNSTILE_SECRET_KEY not set in worker environment.");
+             // Pass env to errorResponse
+            return errorResponse('CAPTCHA configuration error.', 500, corsHeaders, env);
+        }
+        let formData = new FormData();
             formData.append('secret', SECRET_KEY);
             formData.append('response', token);
             if (ip) formData.append('remoteip', ip);
 
             const turnstileResult = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: formData });
-            const outcome = await turnstileResult.json();
-            if (!outcome.success) {
-                console.log('Report Turnstile verification failed:', outcome);
-                return errorResponse(`CAPTCHA verification failed. [${outcome['error-codes']?.join(', ') || 'Unknown reason'}]`, 403, corsHeaders);
-            }
-            // --- End Turnstile Validation ---
+        const outcome = await turnstileResult.json();
+        if (!outcome.success) {
+            console.log('Report Turnstile verification failed:', outcome);
+             // Pass env to errorResponse
+            return errorResponse(`CAPTCHA verification failed. [${outcome['error-codes']?.join(', ') || 'Unknown reason'}]`, 403, corsHeaders, env);
+        }
+        // --- End Turnstile Validation ---
 
-            // 2. Extract Domain and Increment Report Count
-            if (!reportedUrl) {
-                return errorResponse('Missing reportedUrl parameter.', 400, corsHeaders);
-            }
+        // 2. Extract Domain and Increment Report Count
+        if (!reportedUrl) {
+             // Pass env to errorResponse
+            return errorResponse('Missing reportedUrl parameter.', 400, corsHeaders, env);
+        }
 
-            let targetUrl = reportedUrl;
+        let targetUrl = reportedUrl;
             let domain = null;
 
-            try {
-                // Check if it's a shorty URL first (e.g., https://lkly.net/+abc)
-                const shortUrlPattern = /^https:\/\/lkly\.net\/\+(.+)$/;
-                const shortMatch = reportedUrl.match(shortUrlPattern);
+        try {
+            // Check if it's a shorty URL first (e.g., https://YOUR_SHORT_DOMAIN/+abc)
+            // Use the SHORT_DOMAIN env variable to build the pattern dynamically
+            const shortDomain = env.SHORT_DOMAIN || url.origin; // Use configured domain or fallback
+            // Escape potential special regex characters in the domain
+            const escapedDomain = shortDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const shortUrlPattern = new RegExp(`^${escapedDomain}/\\+(.+)$`);
+            const shortMatch = reportedUrl.match(shortUrlPattern);
 
-                if (shortMatch && shortMatch[1]) {
+            if (shortMatch && shortMatch[1]) {
                     const shortId = shortMatch[1];
                     const originalUrl = await LINKS_KV.get(shortId);
                     if (originalUrl) {
@@ -244,7 +260,8 @@ export default {
                     } else {
                         // Report is for a non-existent short link, maybe ignore or log differently?
                         // Let's just return success for now, as the link doesn't exist anyway.
-                         return jsonResponse({ message: 'Report noted (short link not found).' }, 200, corsHeaders);
+                         // Pass env to jsonResponse
+                         return jsonResponse({ message: 'Report noted (short link not found).' }, 200, corsHeaders, env);
                     }
                 }
 
@@ -259,7 +276,8 @@ export default {
             } catch (e) {
                 // Invalid URL submitted for report
                 console.log("Invalid URL submitted for report:", reportedUrl, e.message);
-                return errorResponse('Invalid URL format provided in report.', 400, corsHeaders);
+                 // Pass env to errorResponse
+                return errorResponse('Invalid URL format provided in report.', 400, corsHeaders, env);
             }
 
             if (domain) {
@@ -268,7 +286,8 @@ export default {
                 const alreadyReported = await LINKS_KV.get(userReportKey);
 
                 if (alreadyReported !== null) {
-                    return jsonResponse({ message: 'You have already reported this domain recently.' }, 429, corsHeaders); // 429 Too Many Requests
+                     // Pass env to jsonResponse
+                    return jsonResponse({ message: 'You have already reported this domain recently.' }, 429, corsHeaders, env); // 429 Too Many Requests
                 }
 
                 // Increment the global report count for the domain
@@ -283,31 +302,36 @@ export default {
                 console.log(`Report received for domain: ${domain} from IP: ${ip}. New count: ${currentCount}`);
 
                 // Check threshold and automatically block if reached
-                const BLOCK_THRESHOLD = 3; // Set the threshold
+                // Use environment variable for threshold, default to 3 if not set
+                const BLOCK_THRESHOLD = parseInt(env.REPORT_BLOCK_THRESHOLD || '3');
                 if (currentCount >= BLOCK_THRESHOLD) {
                     const blockKey = `BLOCKED:${domain}`;
                     await LINKS_KV.put(blockKey, "auto"); // Value can indicate it was auto-blocked
                     console.log(`Domain automatically blocked due to report threshold: ${domain}`);
-                     return jsonResponse({ message: 'Report submitted. Domain has been blocked due to multiple reports.' }, 200, corsHeaders);
+                     // Pass env to jsonResponse
+                     return jsonResponse({ message: 'Report submitted. Domain has been blocked due to multiple reports.' }, 200, corsHeaders, env);
                 } else {
-                     return jsonResponse({ message: 'Report submitted successfully. Thank you.' }, 200, corsHeaders);
+                     // Pass env to jsonResponse
+                     return jsonResponse({ message: 'Report submitted successfully. Thank you.' }, 200, corsHeaders, env);
                 }
             } else {
                  // Should not happen if domain extraction logic is correct
-                 return errorResponse('Could not extract domain from reported URL.', 500, corsHeaders);
+                  // Pass env to errorResponse
+                 return errorResponse('Could not extract domain from reported URL.', 500, corsHeaders, env);
             }
 
         } catch (e) {
             console.error("Error processing report:", e);
-            return errorResponse(e.message || 'Failed to process report.', 500, corsHeaders);
+             // Pass env to errorResponse
+            return errorResponse(e.message || 'Failed to process report.', 500, corsHeaders, env);
         }
     }
 
     // API endpoint for checking stats
     else if (path.startsWith('/api/stats/') && method === 'GET') {
-        // Allow CORS for this endpoint
+        // Define CORS headers using the environment variable
         const corsHeaders = {
-          'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
+          'Access-Control-Allow-Origin': env.FRONTEND_DOMAIN || '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
         };
@@ -323,19 +347,23 @@ export default {
         }
 
          if (!shortId) {
-            return errorResponse('Missing short ID in path.', 400, corsHeaders);
+             // Pass env to errorResponse
+            return errorResponse('Missing short ID in path.', 400, corsHeaders, env);
         }
 
         try {
             const metadataJson = await LINKS_KV.get(`${shortId}_meta`);
             if (!metadataJson) {
-                return errorResponse('Short URL not found.', 404, corsHeaders);
+                 // Pass env to errorResponse
+                return errorResponse('Short URL not found.', 404, corsHeaders, env);
             }
             const metadata = JSON.parse(metadataJson);
-            return jsonResponse(metadata, 200, corsHeaders);
+             // Pass env to jsonResponse
+            return jsonResponse(metadata, 200, corsHeaders, env);
         } catch (e) {
             console.error("Error fetching stats:", e);
-            return errorResponse(e.message || 'Failed to fetch stats.', 500, corsHeaders);
+             // Pass env to errorResponse
+            return errorResponse(e.message || 'Failed to fetch stats.', 500, corsHeaders, env);
         }
     }
 
@@ -392,7 +420,8 @@ export default {
 
     // Fallback for any other requests to api.shorty.lkly.net (e.g. /api/unknown)
     else {
-        return errorResponse('API endpoint not found.', 404);
+         // Pass env to errorResponse
+        return errorResponse('API endpoint not found.', 404, {}, env); // Pass empty headers and env
     }
   },
 };

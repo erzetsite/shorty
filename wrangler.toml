@@ -1,0 +1,17 @@
+name = "shorty" # The name of your worker
+main = "worker.js" # The entry point for your worker code
+compatibility_date = "2023-10-30" # Use a recent compatibility date
+
+# KV Namespace binding
+# Make sure you create a KV namespace in your Cloudflare dashboard
+# or via the command line: wrangler kv:namespace create SHORTY_LINKS
+# Then, add the preview_id and id obtained from the command output below.
+[[kv_namespaces]]
+binding = "SHORTY_LINKS" # This is the variable name used in worker.js (env.SHORTY_LINKS)
+id = "" # Replace with your Production KV namespace ID
+preview_id = "" # Replace with your Preview KV namespace ID
+
+# Optional: Add site configuration if you plan to serve index.html via the worker directly
+# [site]
+# bucket = "./" # Directory containing your static assets (like index.html)
+# entry-point = "." # Can be omitted if you only have worker.js

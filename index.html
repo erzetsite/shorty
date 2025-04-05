@@ -554,28 +554,5 @@
         }
         // No longer need the global turnstileCallback function
     </script>
-                                this.setTurnstileToken(token);
-                            },
-                            'expired-callback': () => {
-                                // Token expired, clear it
-                                this.setTurnstileToken('');
-                            },
-                            'error-callback': (errorCode) => {
-                                // Handle errors, e.g., show a message
-                                console.error(`Turnstile error: ${errorCode}`);
-                                this.generateError = `CAPTCHA error (${errorCode}). Please refresh.`;
-                                this.setTurnstileToken('');
-                            }
-                        });
-                    } else {
-                        console.error("Turnstile script not loaded yet.");
-                        // Optionally retry or show an error
-                        this.generateError = 'Could not load CAPTCHA widget. Please refresh.';
-                    }
-                }
-            }
-        }
-        // No longer need the global turnstileCallback function
-    </script>
 </body>
 </html>

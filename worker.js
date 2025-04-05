@@ -108,10 +108,35 @@ export default {
         }
         // --- End Turnstile Validation ---
 
-        // 2. Proceed with link creation if Turnstile passed
+        // 2. Check if domain is manually blocked in KV
+        let domainToCheck = null;
+        try {
+            const urlObject = new URL(longUrl);
+            domainToCheck = urlObject.hostname;
+             // Normalize domain (e.g., remove www.)
+             if (domainToCheck.startsWith('www.')) {
+                domainToCheck = domainToCheck.substring(4);
+            }
+        } catch (e) {
+             // Invalid URL format check happens later, but catch potential errors here too
+             console.log("Could not parse domain for blocklist check:", longUrl, e.message);
+             // Proceed, let the later validation handle the invalid URL format
+        }
+
+        if (domainToCheck) {
+            const blockKey = `BLOCKED:${domainToCheck}`;
+            const isBlocked = await LINKS_KV.get(blockKey);
+            if (isBlocked !== null) { // Check if the key exists (value doesn't matter, just existence)
+                console.log(`Blocked attempt to shorten URL from blocked domain: ${domainToCheck}`);
+                return errorResponse('This domain has been blocked and cannot be shortened.', 403, corsHeaders);
+            }
+        }
+        // --- End Blocklist Check ---
+
+        // 3. Proceed with link creation if Turnstile passed and domain not blocked
         if (!longUrl) {
           // Use the main corsHeaders for the error response too
-          return errorResponse('Missing longUrl parameter', 400, corsHeaders);
+          return errorResponse('Missing longUrl parameter', 400, corsHeaders); // Should be caught earlier, but keep for safety
         }
         // Basic URL validation (consider more robust validation)
         try {
@@ -156,6 +181,126 @@ export default {
         // Return error response with CORS headers
         return errorResponse(e.message || 'Failed to create short link.', 500, corsHeaders);
       }
+    }
+
+    // API endpoint for reporting abuse
+    else if (path === '/api/report' && method === 'POST') {
+        const corsHeaders = { // Define CORS headers for this endpoint
+            'Access-Control-Allow-Origin': 'https://shorty.lkly.net',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        };
+        // Handle preflight requests specifically for /api/report
+        if (method === 'OPTIONS') {
+            return new Response(null, { status: 204, headers: corsHeaders });
+        }
+
+        try {
+            const requestBody = await request.json();
+            const reportedUrl = requestBody.reportedUrl;
+            const token = requestBody['cf-turnstile-response'];
+            const ip = request.headers.get('CF-Connecting-IP');
+
+            // 1. Validate Turnstile Token
+            if (!token) {
+                return errorResponse('Missing CAPTCHA token.', 400, corsHeaders);
+            }
+            const SECRET_KEY = env.TURNSTILE_SECRET_KEY;
+            if (!SECRET_KEY) {
+                console.error("TURNSTILE_SECRET_KEY not set in worker environment.");
+                return errorResponse('CAPTCHA configuration error.', 500, corsHeaders);
+            }
+            let formData = new FormData();
+            formData.append('secret', SECRET_KEY);
+            formData.append('response', token);
+            if (ip) formData.append('remoteip', ip);
+
+            const turnstileResult = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: formData });
+            const outcome = await turnstileResult.json();
+            if (!outcome.success) {
+                console.log('Report Turnstile verification failed:', outcome);
+                return errorResponse(`CAPTCHA verification failed. [${outcome['error-codes']?.join(', ') || 'Unknown reason'}]`, 403, corsHeaders);
+            }
+            // --- End Turnstile Validation ---
+
+            // 2. Extract Domain and Increment Report Count
+            if (!reportedUrl) {
+                return errorResponse('Missing reportedUrl parameter.', 400, corsHeaders);
+            }
+
+            let targetUrl = reportedUrl;
+            let domain = null;
+
+            try {
+                // Check if it's a shorty URL first (e.g., https://lkly.net/+abc)
+                const shortUrlPattern = /^https:\/\/lkly\.net\/\+(.+)$/;
+                const shortMatch = reportedUrl.match(shortUrlPattern);
+
+                if (shortMatch && shortMatch[1]) {
+                    const shortId = shortMatch[1];
+                    const originalUrl = await LINKS_KV.get(shortId);
+                    if (originalUrl) {
+                        targetUrl = originalUrl; // Now we have the destination URL
+                    } else {
+                        // Report is for a non-existent short link, maybe ignore or log differently?
+                        // Let's just return success for now, as the link doesn't exist anyway.
+                         return jsonResponse({ message: 'Report noted (short link not found).' }, 200, corsHeaders);
+                    }
+                }
+
+                // Extract domain from the target URL (either original input or looked up)
+                const urlObject = new URL(targetUrl);
+                domain = urlObject.hostname;
+                // Normalize domain (e.g., remove www.) - optional but good practice
+                if (domain.startsWith('www.')) {
+                    domain = domain.substring(4);
+                }
+
+            } catch (e) {
+                // Invalid URL submitted for report
+                console.log("Invalid URL submitted for report:", reportedUrl, e.message);
+                return errorResponse('Invalid URL format provided in report.', 400, corsHeaders);
+            }
+
+            if (domain) {
+                // Check if this IP has already reported this domain recently
+                const userReportKey = `REPORTED:${ip}:${domain}`;
+                const alreadyReported = await LINKS_KV.get(userReportKey);
+
+                if (alreadyReported !== null) {
+                    return jsonResponse({ message: 'You have already reported this domain recently.' }, 429, corsHeaders); // 429 Too Many Requests
+                }
+
+                // Increment the global report count for the domain
+                const reportCountKey = `REPORT_COUNT:${domain}`;
+                let currentCount = parseInt(await LINKS_KV.get(reportCountKey) || '0');
+                currentCount++;
+                await LINKS_KV.put(reportCountKey, currentCount.toString());
+
+                // Mark that this IP reported this domain (with TTL, e.g., 1 day = 86400 seconds)
+                await LINKS_KV.put(userReportKey, "1", { expirationTtl: 86400 });
+
+                console.log(`Report received for domain: ${domain} from IP: ${ip}. New count: ${currentCount}`);
+
+                // Check threshold and automatically block if reached
+                const BLOCK_THRESHOLD = 3; // Set the threshold
+                if (currentCount >= BLOCK_THRESHOLD) {
+                    const blockKey = `BLOCKED:${domain}`;
+                    await LINKS_KV.put(blockKey, "auto"); // Value can indicate it was auto-blocked
+                    console.log(`Domain automatically blocked due to report threshold: ${domain}`);
+                     return jsonResponse({ message: 'Report submitted. Domain has been blocked due to multiple reports.' }, 200, corsHeaders);
+                } else {
+                     return jsonResponse({ message: 'Report submitted successfully. Thank you.' }, 200, corsHeaders);
+                }
+            } else {
+                 // Should not happen if domain extraction logic is correct
+                 return errorResponse('Could not extract domain from reported URL.', 500, corsHeaders);
+            }
+
+        } catch (e) {
+            console.error("Error processing report:", e);
+            return errorResponse(e.message || 'Failed to process report.', 500, corsHeaders);
+        }
     }
 
     // API endpoint for checking stats

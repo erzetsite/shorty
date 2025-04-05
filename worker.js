@@ -106,7 +106,7 @@ export default {
         await LINKS_KV.put(shortId, longUrl);
         await LINKS_KV.put(`${shortId}_meta`, JSON.stringify(metadata));
 
-        const shortUrlBase = 'https://shorty.lkly.net'; // Generate links with the frontend domain
+        const shortUrlBase = 'https://sh.lkly.net'; // Use the new frontend domain
         const shortUrl = `${shortUrlBase}/${shortId}`;
         // Return response with CORS headers
         return jsonResponse({ shortUrl, originalUrl: longUrl }, 200, corsHeaders);

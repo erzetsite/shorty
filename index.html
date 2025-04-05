@@ -36,9 +36,10 @@
           }
         }
     </script>
+    <!-- Load AlpineJS first -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <!-- Cloudflare Turnstile Script -->
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <!-- Load Turnstile script after Alpine, remove async/defer to ensure it's available for x-init -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>
     <style>
         body::before {
             content: '';
@@ -168,7 +169,8 @@
                 </p>
             </div>
 
-            <div x-data="shortyApp()" class="space-y-8">
+            <!-- Initialize Alpine and render Turnstile widget inside x-init -->
+            <div x-data="shortyApp()" x-init="renderTurnstile()" class="space-y-8">
                 <!-- Generate URL Section -->
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-colors duration-300">
                     <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Create a Short Link</h2>
@@ -178,8 +180,8 @@
                             <input type="url" id="longUrl" x-model="longUrlInput" placeholder="https://example.com/very/long/url/to/shorten" required
                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-gray-100">
                         </div>
-                        <!-- Turnstile Widget Placeholder -->
-                        <div class="cf-turnstile mb-4" data-sitekey="0x4AAAAAABD9jtCV6_XP1aBL" data-callback="turnstileCallback"></div>
+                        <!-- Turnstile Widget Placeholder - Rendered via x-init -->
+                        <div id="turnstile-widget" class="mb-4"></div>
                         <input type="hidden" x-model="turnstileToken"> <!-- Hidden input to store the token -->
 
                         <button type="submit" :disabled="generating || !turnstileToken"
@@ -355,21 +357,41 @@
                     });
                 },
 
-                // Callback function for Turnstile widget
+                // Callback function for Turnstile widget - remains the same
                 setTurnstileToken(token) {
                     this.turnstileToken = token;
+                    // console.log('Turnstile token received:', token); // Optional: for debugging
+                },
+
+                // Function called by x-init to render the widget
+                renderTurnstile() {
+                    if (typeof turnstile !== 'undefined') {
+                        turnstile.render('#turnstile-widget', {
+                            sitekey: '0x4AAAAAABD9jtCV6_XP1aBL',
+                            callback: (token) => {
+                                // Directly call the component's method
+                                this.setTurnstileToken(token);
+                            },
+                            'expired-callback': () => {
+                                // Token expired, clear it
+                                this.setTurnstileToken('');
+                            },
+                            'error-callback': (errorCode) => {
+                                // Handle errors, e.g., show a message
+                                console.error(`Turnstile error: ${errorCode}`);
+                                this.generateError = `CAPTCHA error (${errorCode}). Please refresh.`;
+                                this.setTurnstileToken('');
+                            }
+                        });
+                    } else {
+                        console.error("Turnstile script not loaded yet.");
+                        // Optionally retry or show an error
+                        this.generateError = 'Could not load CAPTCHA widget. Please refresh.';
+                    }
                 }
             }
         }
-        // Make the Alpine component's method globally accessible for Turnstile callback
-        function turnstileCallback(token) {
-            const appElement = document.querySelector('[x-data="shortyApp()"]');
-            if (appElement && appElement.__x) {
-                 appElement.__x.$data.setTurnstileToken(token);
-            } else {
-                console.error("Could not find Alpine component to set Turnstile token.");
-            }
-        }
+        // No longer need the global turnstileCallback function
     </script>
 </body>
 </html>

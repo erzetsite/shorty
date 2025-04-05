@@ -37,6 +37,8 @@
         }
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Cloudflare Turnstile Script -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         body::before {
             content: '';
@@ -176,8 +178,12 @@
                             <input type="url" id="longUrl" x-model="longUrlInput" placeholder="https://example.com/very/long/url/to/shorten" required
                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-gray-100">
                         </div>
-                        <button type="submit" :disabled="generating"
-                                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800 transition duration-150 ease-in-out disabled:opacity-50">
+                        <!-- Turnstile Widget Placeholder -->
+                        <div class="cf-turnstile mb-4" data-sitekey="0x4AAAAAABD9jtCV6_XP1aBL" data-callback="turnstileCallback"></div>
+                        <input type="hidden" x-model="turnstileToken"> <!-- Hidden input to store the token -->
+
+                        <button type="submit" :disabled="generating || !turnstileToken"
+                                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
                             <span x-show="!generating">Shorten URL</span>
                             <span x-show="generating">Generating...</span>
                         </button>
@@ -242,6 +248,7 @@
                 generateError: '',
                 generating: false,
                 copied: false,
+                turnstileToken: '', // To store the Turnstile token
 
                 checkUrlInput: '',
                 statsResult: null,
@@ -254,11 +261,22 @@
                     this.generateError = '';
                     this.copied = false;
 
+                    // Ensure we have a token
+                    if (!this.turnstileToken) {
+                        this.generateError = 'Please complete the CAPTCHA challenge.';
+                        this.generating = false;
+                        return;
+                    }
+
                     try {
                         const response = await fetch('https://api.shorty.lkly.net/api/create', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ longUrl: this.longUrlInput })
+                            // Include the Turnstile token in the request body
+                            body: JSON.stringify({
+                                longUrl: this.longUrlInput,
+                                'cf-turnstile-response': this.turnstileToken // Standard field name
+                            })
                         });
 
                         const result = await response.json();
@@ -275,6 +293,14 @@
                         this.generateError = error.message || 'Failed to shorten URL. Please check the console and try again.';
                     } finally {
                         this.generating = false;
+                        // Reset Turnstile widget after attempt (success or fail)
+                        // Use try/catch as turnstile might not be loaded yet or could error
+                        try {
+                            turnstile.reset();
+                        } catch (e) {
+                            console.warn("Could not reset Turnstile widget:", e);
+                        }
+                        this.turnstileToken = ''; // Clear the stored token
                     }
                 },
 
@@ -327,7 +353,21 @@
                         console.error('Failed to copy: ', err);
                         // Optionally show an error message to the user
                     });
+                },
+
+                // Callback function for Turnstile widget
+                setTurnstileToken(token) {
+                    this.turnstileToken = token;
                 }
+            }
+        }
+        // Make the Alpine component's method globally accessible for Turnstile callback
+        function turnstileCallback(token) {
+            const appElement = document.querySelector('[x-data="shortyApp()"]');
+            if (appElement && appElement.__x) {
+                 appElement.__x.$data.setTurnstileToken(token);
+            } else {
+                console.error("Could not find Alpine component to set Turnstile token.");
             }
         }
     </script>

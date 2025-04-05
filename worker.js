@@ -17,7 +17,7 @@ function generateShortId(length = 6) {
 // Helper to return JSON responses
 function jsonResponse(data, status = 200, headers = {}) {
   headers['Content-Type'] = 'application/json';
-  headers['Access-Control-Allow-Origin'] = '*'; // Allow requests from any origin (adjust for production)
+  headers['Access-Control-Allow-Origin'] = 'https://shorty.lkly.net'; // Restrict to frontend domain
   headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
   headers['Access-Control-Allow-Headers'] = 'Content-Type';
   return new Response(JSON.stringify(data), { status, headers });
@@ -27,7 +27,7 @@ function jsonResponse(data, status = 200, headers = {}) {
 function errorResponse(message, status = 400, headers = {}) { // Add headers parameter
   // Ensure base CORS headers are included if custom ones are provided
   const finalHeaders = {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
       ...headers // Merge provided headers
@@ -53,7 +53,7 @@ export default {
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Max-Age': '86400', // Cache preflight response for 1 day
@@ -65,13 +65,50 @@ export default {
     if (path === '/api/create' && method === 'POST') {
       // Allow CORS for this endpoint specifically if OPTIONS didn't catch it broadly
       const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       };
 
       try {
-        const { longUrl } = await request.json();
+        // Extract Turnstile token and longUrl from the request body
+        const requestBody = await request.json();
+        const longUrl = requestBody.longUrl;
+        const token = requestBody['cf-turnstile-response']; // Standard field name
+        const ip = request.headers.get('CF-Connecting-IP'); // Get the client's IP address
+
+        // 1. Validate Turnstile Token
+        if (!token) {
+          return errorResponse('Missing CAPTCHA token.', 400, corsHeaders);
+        }
+
+        // Secret key is stored in env via `wrangler secret put TURNSTILE_SECRET_KEY`
+        const SECRET_KEY = env.TURNSTILE_SECRET_KEY;
+        if (!SECRET_KEY) {
+            console.error("TURNSTILE_SECRET_KEY not set in worker environment.");
+            return errorResponse('CAPTCHA configuration error.', 500, corsHeaders);
+        }
+
+        let formData = new FormData();
+        formData.append('secret', SECRET_KEY);
+        formData.append('response', token);
+        if (ip) {
+            formData.append('remoteip', ip); // Include client IP for better validation
+        }
+
+        const turnstileResult = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const outcome = await turnstileResult.json();
+        if (!outcome.success) {
+            console.log('Turnstile verification failed:', outcome);
+            return errorResponse(`CAPTCHA verification failed. [${outcome['error-codes']?.join(', ') || 'Unknown reason'}]`, 403, corsHeaders);
+        }
+        // --- End Turnstile Validation ---
+
+        // 2. Proceed with link creation if Turnstile passed
         if (!longUrl) {
           // Use the main corsHeaders for the error response too
           return errorResponse('Missing longUrl parameter', 400, corsHeaders);
@@ -125,7 +162,7 @@ export default {
     else if (path.startsWith('/api/stats/') && method === 'GET') {
         // Allow CORS for this endpoint
         const corsHeaders = {
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': 'https://shorty.lkly.net', // Restrict to frontend domain
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
         };

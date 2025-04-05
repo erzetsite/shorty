@@ -35,42 +35,6 @@ function errorResponse(message, status = 400, headers = {}) { // Add headers par
   return jsonResponse({ error: message }, status, finalHeaders); // Pass headers to jsonResponse
 }
 
-// Function to check URL against Google Safe Browsing (Web Risk API)
-async function isUrlMalicious(urlToCheck, apiKey) {
-    if (!apiKey) {
-        console.error("Google Safe Browsing API Key not configured in worker environment.");
-        // Fail closed (block link creation) if key is missing
-        throw new Error("Safe Browsing configuration error.");
-    }
-
-    // Construct the API URL. We check for common threat types.
-    const webRiskUrl = `https://webrisk.googleapis.com/v1/uris:lookup?key=${apiKey}&uri=${encodeURIComponent(urlToCheck)}&threatTypes=MALWARE&threatTypes=SOCIAL_ENGINEERING&threatTypes=UNWANTED_SOFTWARE`;
-
-    try {
-        const response = await fetch(webRiskUrl);
-        if (!response.ok) {
-            // Log API error but block creation (fail closed)
-            console.error(`Google Web Risk API error: ${response.status} ${response.statusText}`, await response.text());
-            throw new Error(`Safe Browsing check failed (API status: ${response.status}).`);
-        }
-
-        const data = await response.json();
-
-        // If 'threat' key exists in the response, the URL is considered malicious
-        if (data.threat) {
-            console.log(`Blocked malicious URL: ${urlToCheck}, Threat types: ${data.threat.threatTypes.join(', ')}`);
-            return true; // URL is malicious
-        }
-
-        return false; // URL is safe
-
-    } catch (error) {
-        console.error("Error during Google Web Risk API call:", error);
-        // Fail closed - block if the check fails for any reason (e.g., network error)
-        throw new Error("Safe Browsing check failed.");
-    }
-}
-
 export default {
   async fetch(request, env, ctx) {
     // env.SHORTY_LINKS will be our KV namespace
@@ -144,19 +108,10 @@ export default {
         }
         // --- End Turnstile Validation ---
 
-        // 2. Check if URL is malicious (if Turnstile passed)
-        const GOOGLE_API_KEY = env.GOOGLE_SAFE_BROWSING_API_KEY;
-        // Note: The isUrlMalicious function throws errors if key is missing or API fails,
-        // which will be caught by the main try/catch block below.
-        if (await isUrlMalicious(longUrl, GOOGLE_API_KEY)) {
-            return errorResponse('Provided URL is flagged as unsafe and cannot be shortened.', 400, corsHeaders);
-        }
-        // --- End Safe Browsing Check ---
-
-        // 3. Proceed with link creation if Turnstile and Safe Browsing passed
+        // 2. Proceed with link creation if Turnstile passed
         if (!longUrl) {
           // Use the main corsHeaders for the error response too
-          return errorResponse('Missing longUrl parameter', 400, corsHeaders); // Should be caught earlier, but keep for safety
+          return errorResponse('Missing longUrl parameter', 400, corsHeaders);
         }
         // Basic URL validation (consider more robust validation)
         try {

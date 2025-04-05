@@ -134,7 +134,12 @@ export default {
           return new Response(null, { status: 204, headers: corsHeaders });
         }
 
-        const shortId = path.substring('/api/stats/'.length);
+        let shortId = path.substring('/api/stats/'.length);
+        // Remove leading '+' if present in the path from the frontend request
+        if (shortId.startsWith('+')) {
+            shortId = shortId.substring(1);
+        }
+
          if (!shortId) {
             return errorResponse('Missing short ID in path.', 400, corsHeaders);
         }

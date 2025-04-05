@@ -1,0 +1,10 @@
+{
+  "name": "shorty-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Shorty URL Shortener",
+  "private": true,
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {}
+}

@@ -8,19 +8,18 @@
     <!-- Configuration for Frontend Variables -->
     <script>
       window.shortyConfig = {
-        // REQUIRED: Set these variables in your Cloudflare Pages environment or replace the placeholders below.
-        // These are read by the frontend JavaScript.
-        API_WORKER_URL: 'https://api.shorty.lkly.net', // Your deployed worker URL (e.g., https://api.yourdomain.com)
-        TURNSTILE_SITE_KEY: '0x4AAAAAABD9jtCV6_XP1aBL', // Your Cloudflare Turnstile Site Key
-        SHORT_DOMAIN: 'https://lkly.net', // The domain used for short links (e.g., https://your-short.link)
-
-        // OPTIONAL: Umami Analytics Configuration
-        UMAMI_SCRIPT_URL: '', // e.g., https://your-umami.com/script.js
-        UMAMI_WEBSITE_ID: '', // Your Umami Website ID
+        // These values are replaced by the build script (build.js) using environment variables
+        // set in the Cloudflare Pages build environment.
+        API_WORKER_URL: '__API_WORKER_URL__',
+        TURNSTILE_SITE_KEY: '__TURNSTILE_SITE_KEY__',
+        SHORT_DOMAIN: '__SHORT_DOMAIN__',
+        UMAMI_SCRIPT_URL: '__UMAMI_SCRIPT_URL__',
+        UMAMI_WEBSITE_ID: '__UMAMI_WEBSITE_ID__',
       };
 
-      // Inject Umami script if configured
-      if (window.shortyConfig.UMAMI_SCRIPT_URL && window.shortyConfig.UMAMI_WEBSITE_ID) {
+      // Inject Umami script if configured (check for non-empty, non-placeholder values)
+      if (window.shortyConfig.UMAMI_SCRIPT_URL && window.shortyConfig.UMAMI_SCRIPT_URL !== '__UMAMI_SCRIPT_URL__' &&
+          window.shortyConfig.UMAMI_WEBSITE_ID && window.shortyConfig.UMAMI_WEBSITE_ID !== '__UMAMI_WEBSITE_ID__') {
         const script = document.createElement('script');
         script.defer = true;
         script.src = window.shortyConfig.UMAMI_SCRIPT_URL;

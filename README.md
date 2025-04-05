@@ -82,8 +82,11 @@ Follow these steps to deploy your own instance of Shorty.
 
 6.  **Deploy the Frontend (Pages):**
     *   Connect your Git repository to Cloudflare Pages.
-    *   Configure the build settings (usually no build command needed, set output directory to `/`).
-    *   Add the **Pages Environment Variables** as described in step 4.
+    *   Configure the build settings:
+        *   **Build command:** `npm run build`
+        *   **Build output directory:** `/` (or wherever your `index.html` is located - root in this case)
+        *   **Root directory:** `/` (if `package.json` is in the root)
+    *   Add the **Pages Environment Variables** as described in step 4 (under Settings -> Environment variables -> Production). These are crucial for the build script.
     *   Deploy the site.
     *   Assign your custom frontend domain (e.g., `shorty.yourdomain.com`) to the Pages project.
 

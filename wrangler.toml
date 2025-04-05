@@ -8,8 +8,8 @@ compatibility_date = "2023-10-30" # Use a recent compatibility date
 # Then, add the preview_id and id obtained from the command output below.
 [[kv_namespaces]]
 binding = "SHORTY_LINKS" # This is the variable name used in worker.js (env.SHORTY_LINKS)
-id = "" # Replace with your Production KV namespace ID
-preview_id = "" # Replace with your Preview KV namespace ID
+id = "33ba4802b325423085be46e2103a1e3e" # Your Production KV namespace ID
+preview_id = "" # Preview ID was not provided, leave empty for now
 
 # Optional: Add site configuration if you plan to serve index.html via the worker directly
 # [site]

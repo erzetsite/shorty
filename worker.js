@@ -39,9 +39,10 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    // Note: Hostname check is removed as wrangler.toml now routes only api.shorty.lkly.net/* to this worker.
 
-    // Handle CORS preflight requests
-    if (method === 'OPTIONS') {
+    // Handle CORS preflight requests for API endpoints
+    if (method === 'OPTIONS' && (path.startsWith('/api/'))) {
       return new Response(null, {
         status: 204,
         headers: {
@@ -55,7 +56,19 @@ export default {
 
     // API endpoint for creating short links
     if (path === '/api/create' && method === 'POST') {
+      // Allow CORS for this endpoint specifically if OPTIONS didn't catch it broadly
+      const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      };
+
       try {
+        // Handle preflight request specifically for /api/create if needed
+        if (method === 'OPTIONS') {
+          return new Response(null, { status: 204, headers: corsHeaders });
+        }
+
         const { longUrl } = await request.json();
         if (!longUrl) {
           return errorResponse('Missing longUrl parameter');
@@ -93,39 +106,58 @@ export default {
         await LINKS_KV.put(shortId, longUrl);
         await LINKS_KV.put(`${shortId}_meta`, JSON.stringify(metadata));
 
-        const shortUrlBase = 'https://shorty.lkly.net'; // Use the site's domain for generated URLs
-        const shortUrl = `${shortUrlBase}/${shortId}`; // Construct the full short URL
-        return jsonResponse({ shortUrl, originalUrl: longUrl });
+        const shortUrlBase = 'https://shorty.lkly.net'; // Generate links with the frontend domain
+        const shortUrl = `${shortUrlBase}/${shortId}`;
+        // Return response with CORS headers
+        return jsonResponse({ shortUrl, originalUrl: longUrl }, 200, corsHeaders);
 
       } catch (e) {
         console.error("Error creating link:", e);
-        return errorResponse(e.message || 'Failed to create short link.', 500);
+        // Return error response with CORS headers
+        return errorResponse(e.message || 'Failed to create short link.', 500, corsHeaders);
       }
     }
 
     // API endpoint for checking stats
-    if (path.startsWith('/api/stats/') && method === 'GET') {
+    else if (path.startsWith('/api/stats/') && method === 'GET') {
+        // Allow CORS for this endpoint
+        const corsHeaders = {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        };
+        // Handle preflight request specifically for /api/stats/* if needed
+        if (method === 'OPTIONS') {
+          return new Response(null, { status: 204, headers: corsHeaders });
+        }
+
         const shortId = path.substring('/api/stats/'.length);
          if (!shortId) {
-            return errorResponse('Missing short ID in path.');
+            return errorResponse('Missing short ID in path.', 400, corsHeaders);
         }
 
         try {
             const metadataJson = await LINKS_KV.get(`${shortId}_meta`);
             if (!metadataJson) {
-                return errorResponse('Short URL not found.', 404);
+                return errorResponse('Short URL not found.', 404, corsHeaders);
             }
             const metadata = JSON.parse(metadataJson);
-            return jsonResponse(metadata);
+            return jsonResponse(metadata, 200, corsHeaders);
         } catch (e) {
             console.error("Error fetching stats:", e);
-            return errorResponse(e.message || 'Failed to fetch stats.', 500);
+            return errorResponse(e.message || 'Failed to fetch stats.', 500, corsHeaders);
         }
     }
 
-    // Redirect short links
-    if (path !== '/' && path !== '/api/create' && !path.startsWith('/api/stats/')) {
+    // Handle Redirects (Any path that isn't /api/*)
+    // This logic now runs because the Page Rule forwards shorty.lkly.net/<id> to api.shorty.lkly.net/<id>
+    else if (!path.startsWith('/api/')) {
       const shortId = path.substring(1); // Remove leading '/'
+
+      if (!shortId) {
+          // If someone accesses api.shorty.lkly.net/ directly, show a message
+          return new Response('Shorty API Endpoint. Use shorty.lkly.net for the frontend.', { status: 200 });
+      }
 
       try {
         const longUrl = await LINKS_KV.get(shortId);
@@ -154,24 +186,18 @@ export default {
         } else {
           // If short ID not found, maybe redirect to homepage or show a 404 page
           // For now, let's return a simple 404 text response
+           // Redirect logic remains the same
            return new Response('Short URL not found.', { status: 404 });
         }
       } catch (e) {
          console.error("Error during redirect:", e);
-         return new Response('An error occurred.', { status: 500 });
+         return new Response('An error occurred during redirect.', { status: 500 });
       }
     }
 
-    // Serve the index.html file for the root path
-    // Note: In a real deployment, you'd likely use Cloudflare Pages for the static site
-    // and have the worker handle only API/redirects.
-    // This basic example returns a simple message for the root.
-    if (path === '/') {
-       return new Response('Welcome to Shorty! Use the frontend to create links.', {
-            headers: { 'Content-Type': 'text/plain' },
-       });
+    // Fallback for any other requests to api.shorty.lkly.net (e.g. /api/unknown)
+    else {
+        return errorResponse('API endpoint not found.', 404);
     }
-
-    return new Response('Not Found', { status: 404 });
   },
 };

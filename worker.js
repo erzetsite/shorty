@@ -106,8 +106,8 @@ export default {
         await LINKS_KV.put(shortId, longUrl);
         await LINKS_KV.put(`${shortId}_meta`, JSON.stringify(metadata));
 
-        const shortUrlBase = 'https://sh.lkly.net'; // Use the new frontend domain
-        const shortUrl = `${shortUrlBase}/${shortId}`;
+        const shortUrlBase = 'https://lkly.net'; // Use the final short domain
+        const shortUrl = `${shortUrlBase}/+${shortId}`; // Add the '+' before the shortId
         // Return response with CORS headers
         return jsonResponse({ shortUrl, originalUrl: longUrl }, 200, corsHeaders);
 
@@ -150,12 +150,17 @@ export default {
     }
 
     // Handle Redirects (Any path that isn't /api/*)
-    // This logic now runs because the Page Rule forwards shorty.lkly.net/<id> to api.shorty.lkly.net/<id>
+    // This logic runs because the Page Rule forwards lkly.net/+<id> to api.shorty.lkly.net/+<id>
     else if (!path.startsWith('/api/')) {
-      const shortId = path.substring(1); // Remove leading '/'
+      // Check if the path starts with /+ and extract the ID after it
+      let shortId = null;
+      if (path.startsWith('/+')) {
+          shortId = path.substring(2); // Remove leading '/+'
+      }
 
       if (!shortId) {
-          // If someone accesses api.shorty.lkly.net/ directly, show a message
+          // If someone accesses api.shorty.lkly.net/ or api.shorty.lkly.net/something_else
+          // show a message or handle as appropriate.
           return new Response('Shorty API Endpoint. Use shorty.lkly.net for the frontend.', { status: 200 });
       }
 

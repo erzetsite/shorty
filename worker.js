@@ -49,7 +49,7 @@ export default {
     // Note: Hostname check is removed as wrangler.toml now routes only api.shorty.lkly.net/* to this worker.
 
     // Handle CORS preflight requests for API endpoints
-    if (method === 'OPTIONS' && (path.startsWith('/api/') || path.startsWith('/+/api/'))) {
+    if (method === 'OPTIONS' && (path.startsWith('/api/'))) {
       return new Response(null, {
         status: 204,
         headers: {
@@ -61,8 +61,8 @@ export default {
       });
     }
 
-    // API endpoint for creating short links
-    if ((path === '/api/create' || path === '/+/api/create') && method === 'POST') {
+    // API endpoint for creating short links (path includes /+ due to routing)
+    if (path === '/+/api/create' && method === 'POST') {
       // Allow CORS for this endpoint specifically if OPTIONS didn't catch it broadly
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -121,8 +121,8 @@ export default {
       }
     }
 
-    // API endpoint for checking stats
-    else if ((path.startsWith('/api/stats/') || path.startsWith('/+/api/stats/')) && method === 'GET') {
+    // API endpoint for checking stats (path includes /+ due to routing)
+    else if (path.startsWith('/+/api/stats/') && method === 'GET') {
         // Allow CORS for this endpoint
         const corsHeaders = {
           'Access-Control-Allow-Origin': '*',
@@ -134,13 +134,7 @@ export default {
           return new Response(null, { status: 204, headers: corsHeaders });
         }
 
-        // Extract shortId from either /api/stats/ or /+/api/stats/ path format
-        let shortId;
-        if (path.startsWith('/api/stats/')) {
-            shortId = path.substring('/api/stats/'.length);
-        } else if (path.startsWith('/+/api/stats/')) {
-            shortId = path.substring('/+/api/stats/'.length);
-        }
+        const shortId = path.substring('/+/api/stats/'.length); // Adjusted for /+ prefix
          if (!shortId) {
             return errorResponse('Missing short ID in path.', 400, corsHeaders);
         }

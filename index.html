@@ -114,7 +114,7 @@
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 min-h-screen flex flex-col">
     <!-- This outer div now controls the Alpine component -->
-    <div x-data="shortyApp()" x-init="initDarkMode(); renderTurnstile()" class="flex-grow flex flex-col">
+    <div x-data="shortyApp()" x-init="initDarkMode(); initTurnstileWatcher()" class="flex-grow flex flex-col">
         <header class="bg-white dark:bg-gray-800 shadow-sm transition-colors duration-300">
             <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
                 <div>
@@ -154,11 +154,13 @@
                     <form @submit.prevent="generateShortUrl">
                         <div class="mb-4">
                             <label for="longUrl" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Original URL</label>
+                            <!-- Add @focus.once to trigger Turnstile rendering -->
                             <input type="url" id="longUrl" x-model="longUrlInput" placeholder="https://example.com/very/long/url/to/shorten" required
+                                   @focus.once="renderMainTurnstile()"
                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-gray-100">
                         </div>
-                        <!-- Turnstile Widget Placeholder - Rendered via x-init, centered -->
-                        <div id="turnstile-widget" class="mb-4 flex justify-center"></div>
+                        <!-- Turnstile Widget Placeholder - Rendered on focus, centered -->
+                        <div id="turnstile-widget" class="mb-4 flex justify-center min-h-[65px]"></div> <!-- Added min-height to prevent layout shift -->
                         <input type="hidden" x-model="turnstileToken"> <!-- Hidden input to store the token -->
 
                         <button type="submit" :disabled="generating || !turnstileToken"
@@ -281,6 +283,7 @@
                 generating: false,
                 copied: false,
                 turnstileToken: '', // To store the main form Turnstile token
+                mainTurnstileRendered: false, // Track if main Turnstile has been rendered
 
                 checkUrlInput: '',
                 statsResult: null,
@@ -395,19 +398,28 @@
                 // Turnstile Methods
                 setTurnstileToken(token) { this.turnstileToken = token; },
                 setReportTurnstileToken(token) { this.reportTurnstileToken = token; },
-                renderTurnstile() {
-                    this.renderSpecificTurnstile('#turnstile-widget', this.setTurnstileToken);
-                    // Watch for the modal opening to render its Turnstile widget
+                // Renamed from renderTurnstile to avoid confusion and only handle the watcher
+                initTurnstileWatcher() {
+                    // Watch for the report modal opening to render its Turnstile widget
                     this.$watch('showReportModal', (value) => {
                         if (value) {
-                             this.$nextTick(() => {
+                            this.$nextTick(() => {
+                                // Reset report Turnstile state before rendering
+                                this.reportTurnstileToken = '';
                                 this.renderSpecificTurnstile('#report-turnstile-widget', this.setReportTurnstileToken);
                             });
                         }
                     });
                 },
+                // New method specifically for the main form Turnstile
+                renderMainTurnstile() {
+                    if (!this.mainTurnstileRendered) {
+                        this.renderSpecificTurnstile('#turnstile-widget', this.setTurnstileToken);
+                        this.mainTurnstileRendered = true;
+                    }
+                },
                 renderSpecificTurnstile(widgetSelector, callbackMethod) {
-                     if (typeof turnstile !== 'undefined') {
+                    if (typeof turnstile !== 'undefined') {
                         const widgetElement = document.querySelector(widgetSelector);
                         if (!widgetElement) { console.error(`Turnstile widget container not found: ${widgetSelector}`); return; }
                         // Only render if the container is empty

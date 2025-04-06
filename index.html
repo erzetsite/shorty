@@ -154,20 +154,20 @@
                     <form @submit.prevent="generateShortUrl">
                         <div class="mb-4">
                             <label for="longUrl" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Original URL</label>
-                            <!-- Add @focus.once to trigger Turnstile rendering -->
+                            <!-- Removed @focus.once trigger -->
                             <input type="url" id="longUrl" x-model="longUrlInput" placeholder="https://example.com/very/long/url/to/shorten" required
-                                   @focus.once="renderMainTurnstile()"
                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-gray-100">
                         </div>
-                        <!-- Turnstile Widget Placeholder - Rendered on focus, centered -->
-                        <div id="turnstile-widget" class="mb-4 flex justify-center min-h-[65px]"></div> <!-- Added min-height to prevent layout shift -->
-                        <input type="hidden" x-model="turnstileToken"> <!-- Hidden input to store the token -->
+                        <!-- Hidden input to store the token -->
+                        <input type="hidden" x-model="turnstileToken">
 
-                        <button type="submit" :disabled="generating || !turnstileToken"
-                                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button type="submit" :disabled="generating"
+                                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800 transition duration-150 ease-in-out disabled:opacity-50">
                             <span x-show="!generating">Shorten URL</span>
                             <span x-show="generating">Generating...</span>
                         </button>
+                        <!-- Turnstile Widget Placeholder - Moved below button, rendered on demand -->
+                        <div id="turnstile-widget" class="mt-4 flex justify-center"></div>
                     </form>
                     <div x-show="generatedUrl" x-transition x-cloak class="mt-4 p-3 bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700 rounded-md text-green-800 dark:text-green-200">
                         Short URL: <a :href="generatedUrl" target="_blank" class="font-medium hover:underline" x-text="generatedUrl"></a>
@@ -283,7 +283,7 @@
                 generating: false,
                 copied: false,
                 turnstileToken: '', // To store the main form Turnstile token
-                mainTurnstileRendered: false, // Track if main Turnstile has been rendered
+                // Removed mainTurnstileRendered state
 
                 checkUrlInput: '',
                 statsResult: null,
@@ -330,15 +330,21 @@
                 async generateShortUrl() {
                     this.generating = true;
                     this.generatedUrl = '';
+                    this.generating = true; // Set generating true initially
+                    this.generatedUrl = '';
                     this.generateError = '';
                     this.copied = false;
 
+                    // Check if Turnstile token is missing
                     if (!this.turnstileToken) {
-                        this.generateError = 'Please complete the CAPTCHA challenge.';
-                        this.generating = false;
-                        return;
+                        this.generateError = 'Please complete the CAPTCHA challenge below.';
+                        // Attempt to render the Turnstile widget if token is missing
+                        this.renderSpecificTurnstile('#turnstile-widget', this.setTurnstileToken);
+                        this.generating = false; // Stop loading state
+                        return; // Stop execution until user completes captcha and clicks again
                     }
 
+                    // Token exists, proceed with API call
                     try {
                         if (!apiUrl) throw new Error("API URL is not configured.");
                         const response = await fetch(`${apiUrl}/api/create`, {
@@ -357,8 +363,13 @@
                         this.generateError = error.message || 'Failed to shorten URL. Please check the console and try again.';
                     } finally {
                         this.generating = false;
-                        try { turnstile.reset('#turnstile-widget'); } catch (e) { console.warn("Could not reset main Turnstile widget:", e); }
-                        this.turnstileToken = '';
+                        // Reset the widget after successful/failed attempt if it exists
+                        try {
+                            if (document.querySelector('#turnstile-widget').innerHTML.trim() !== '') {
+                                turnstile.reset('#turnstile-widget');
+                            }
+                        } catch (e) { console.warn("Could not reset main Turnstile widget:", e); }
+                        this.turnstileToken = ''; // Clear the token after use
                     }
                 },
 
@@ -411,13 +422,8 @@
                         }
                     });
                 },
-                // New method specifically for the main form Turnstile
-                renderMainTurnstile() {
-                    if (!this.mainTurnstileRendered) {
-                        this.renderSpecificTurnstile('#turnstile-widget', this.setTurnstileToken);
-                        this.mainTurnstileRendered = true;
-                    }
-                },
+                // Removed renderMainTurnstile method
+
                 renderSpecificTurnstile(widgetSelector, callbackMethod) {
                     if (typeof turnstile !== 'undefined') {
                         const widgetElement = document.querySelector(widgetSelector);

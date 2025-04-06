@@ -283,7 +283,7 @@
                 generating: false,
                 copied: false,
                 turnstileToken: '', // To store the main form Turnstile token
-                // Removed mainTurnstileRendered state
+                awaitingTurnstileForSubmit: false, // Flag to indicate waiting state
 
                 checkUrlInput: '',
                 statsResult: null,
@@ -326,25 +326,37 @@
                     else document.documentElement.classList.remove('dark');
                 },
 
-                // Link Generation Method
+                // Link Generation Method - Step 1: Handle button click
                 async generateShortUrl() {
-                    this.generating = true;
-                    this.generatedUrl = '';
-                    this.generating = true; // Set generating true initially
+                    this.generating = true; // Show loading state
                     this.generatedUrl = '';
                     this.generateError = '';
                     this.copied = false;
+                    this.awaitingTurnstileForSubmit = false; // Reset flag
 
                     // Check if Turnstile token is missing
                     if (!this.turnstileToken) {
                         this.generateError = 'Please complete the CAPTCHA challenge below.';
-                        // Attempt to render the Turnstile widget if token is missing
+                        this.awaitingTurnstileForSubmit = true; // Set flag: we need the token
+                        // Attempt to render the Turnstile widget
                         this.renderSpecificTurnstile('#turnstile-widget', this.setTurnstileToken);
-                        this.generating = false; // Stop loading state
-                        return; // Stop execution until user completes captcha and clicks again
+                        // Keep generating = true, don't return yet. Submission happens in callback.
+                    } else {
+                        // Token exists, proceed directly to submission
+                        await this.submitShortenRequest();
+                    }
+                },
+
+                // Link Generation Method - Step 2: Actual API submission logic
+                async submitShortenRequest() {
+                    // Ensure we have a token before proceeding (might be called directly or from callback)
+                    if (!this.turnstileToken) {
+                        console.error("submitShortenRequest called without a Turnstile token.");
+                        this.generateError = "CAPTCHA token missing. Please try again.";
+                        this.generating = false;
+                        return;
                     }
 
-                    // Token exists, proceed with API call
                     try {
                         if (!apiUrl) throw new Error("API URL is not configured.");
                         const response = await fetch(`${apiUrl}/api/create`, {
@@ -358,14 +370,18 @@
                         const result = await response.json();
                         if (!response.ok) throw new Error(result.error || `HTTP error! status: ${response.status}`);
                         this.generatedUrl = result.shortUrl;
+                        this.generateError = ''; // Clear error on success
                     } catch (error) {
                         console.error('Error generating short URL:', error);
                         this.generateError = error.message || 'Failed to shorten URL. Please check the console and try again.';
+                        this.generatedUrl = ''; // Clear result on error
                     } finally {
-                        this.generating = false;
+                        this.generating = false; // Stop loading state
+                        this.awaitingTurnstileForSubmit = false; // Reset flag
                         // Reset the widget after successful/failed attempt if it exists
                         try {
-                            if (document.querySelector('#turnstile-widget').innerHTML.trim() !== '') {
+                            const widget = document.querySelector('#turnstile-widget');
+                            if (widget && widget.innerHTML.trim() !== '') {
                                 turnstile.reset('#turnstile-widget');
                             }
                         } catch (e) { console.warn("Could not reset main Turnstile widget:", e); }
@@ -404,10 +420,17 @@
                         this.copied = true;
                         setTimeout(() => { this.copied = false; }, 2000);
                     }).catch(err => { console.error('Failed to copy: ', err); });
-                },
+                }, // Added missing closing brace and comma here
 
                 // Turnstile Methods
-                setTurnstileToken(token) { this.turnstileToken = token; },
+                setTurnstileToken(token) {
+                    this.turnstileToken = token;
+                    // If we received a token AND we were waiting for it after a submit click...
+                    if (token && this.awaitingTurnstileForSubmit) {
+                        this.generateError = ''; // Clear the 'please complete' message
+                        this.submitShortenRequest(); // ...automatically trigger the submission.
+                    }
+                 },
                 setReportTurnstileToken(token) { this.reportTurnstileToken = token; },
                 // Renamed from renderTurnstile to avoid confusion and only handle the watcher
                 initTurnstileWatcher() {

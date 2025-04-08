@@ -53,16 +53,15 @@ Follow these steps to deploy your own instance of Shorty.
     *   Open `wrangler.toml`.
     *   Change `name` to a unique name for your worker (e.g., `shorty-api-worker`).
     *   Update the `kv_namespaces` section:
-        *   Replace `"YOUR_KV_NAMESPACE_ID"` with the actual ID of the KV namespace you created.
-    *   Update the `[vars]` section with the **required** environment variables (see Configuration below). You can set placeholder values here and override them in the Cloudflare dashboard later if preferred.
-    *   Configure the `route` under `[env.production]` (or your main environment) to point to your API domain:
+        *   Replace the placeholder `id = "..."` value with the actual ID of the KV namespace you created.
+    *   Ensure the top-level `routes` array is configured correctly. You will typically have one route for your API domain (e.g., `api.shorty.yourdomain.com/*`) and one for your short link domain (e.g., `s.yourdomain.com/+*` or similar, depending on your setup in Step 7). Example:
         ```toml
-        [env.production]
         routes = [
-          { pattern = "api.shorty.yourdomain.com/*", custom_domain = true }
+          { pattern = "api.shorty.yourdomain.com/*", zone_name = "yourdomain.com" },
+          { pattern = "s.yourdomain.com/+*", zone_name = "yourdomain.com" }
         ]
         ```
-        *(Replace `api.shorty.yourdomain.com` with your chosen API domain)*
+        *(Replace `api.shorty.yourdomain.com`, `s.yourdomain.com`, and `yourdomain.com` with your actual domains/zone names)*
 
 4.  **Configure Environment Variables & Secrets:**
     *   Create a `.env` file (or use the provided one) to keep track of your keys and variables. **Do not commit this file with actual secrets.**

@@ -14,8 +14,8 @@ routes = [
 # or via the command line: wrangler kv:namespace create SHORTY_LINKS
 # Then, add the preview_id and id obtained from the command output below.
 [[kv_namespaces]]
-binding = "SHORT_LINKS" # This is the variable name used in worker.js (env.SHORTY_LINKS)
-id = "fccb4c183192452786dfaac176e18fb1" # Your Production KV namespace ID
+binding = "shorty" # This is the variable name used in worker.js (env.SHORTY_LINKS)
+id = "2bdafa4cbedf4f80b5a5d6e050bfd431" # Your Production KV namespace ID
 preview_id = "" # Preview ID was not provided, leave empty for now
 
 # Optional: Add site configuration if you plan to serve index.html via the worker directly

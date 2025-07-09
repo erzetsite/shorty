@@ -33,10 +33,10 @@ function errorResponse(message, status = 400, headers = {}, env) { // Add env
 
 export default {
   async fetch(request, env, ctx) {
-    // env.shorty will be our KV namespace
-    const LINKS_KV = env.shorty;
+    // env.SHORTY_LINKS will be our KV namespace
+    const LINKS_KV = env.SHORTY_LINKS;
     if (!LINKS_KV) {
-        return errorResponse("KV Namespace 'shorty' not bound.", 500);
+        return errorResponse("KV Namespace 'SHORTY_LINKS' not bound.", 500);
     }
 
     const url = new URL(request.url);
